@@ -1,0 +1,45 @@
+#!/bin/bash
+
+# launch the workspace developer container outside of vscode
+
+thisdir=$(realpath $(dirname ${BASH_SOURCE[0]}))
+
+pwd=$(pwd)
+cd $thisdir
+
+echo "building with logs in /tmp/launch_dev.log ..." 
+podman build -t dev_ws ${thisdir}/.devcontainer > /tmp/launch_dev.log
+echo "build complete."
+
+export MYHOME=/home/${USER}
+mounts="
+-v/${pwd}/..:${pwd}/..
+-v=${MYHOME}:${MYHOME}
+-v=${MYHOME}/.ssh:/root/.ssh
+-v=${MYHOME}/.bash_history:/root/.bash_history
+-v=${thisdir}/.bashrc_dev:/root/.bashrc
+-v=${thisdir}/.inputrc:/root/.inputrc
+-v=${XDG_RUNTIME_DIR}/podman/podman.sock:/var/run/docker.sock
+-v=/tmp/.X11-unix/:/tmp/.X11-unix/
+"
+
+# --security-opt=label=disable
+
+opts="
+-e DISPLAY
+-e USER
+-e KUBECONFIG
+-e SHELL
+--security-opt=label=type:container_runtime_t
+--annotation=run.oci.keep_original_groups=1
+--storage-opt=ignore_chown_errors=true
+"
+
+# these options are specific to DLS - everything else should be generic
+dls="
+-v /dls_sw/apps/kubernetes/pollux/:/dls_sw/apps/kubernetes/pollux/
+-v /dls_sw/apps/kubernetes/argus/:/dls_sw/apps/kubernetes/argus/
+"
+
+systemctl --user start podman.socket
+podman run ${dls} ${opts} -w ${pwd} --rm ${mounts} -it "$@" dev_ws bash
